@@ -46,18 +46,20 @@ def calculate_risk_indicators(df):
 
 
 def calculate_warning_score(df):
-    """
-    Tính WarningScore dựa trên trọng số đã thiết kế.
-    """
     perf_risk, fail_risk, trend_risk, fin_risk = calculate_risk_indicators(df)
 
-    # Áp dụng trọng số: 40% Performance, 30% Failure, 20% Trend, 10% Financial
     warning_score = (
             0.40 * perf_risk +
             0.30 * fail_risk +
             0.20 * trend_risk +
             0.10 * fin_risk
     )
+
+    # Nếu tổng số môn đăng ký cả năm = 0 -> Đẩy thẳng rủi ro lên 1.0 (Cao nhất)
+    total_enrolled = df["1st_sem_enrolled"] + df["2nd_sem_enrolled"]
+
+    warning_score = np.where(total_enrolled == 0, 1.0, warning_score)
+
     return warning_score
 
 
@@ -71,26 +73,30 @@ def apply_warning_labels():
     test_df["WarningScore"] = calculate_warning_score(test_df)
 
     # 3. TÌM NGƯỠNG (THRESHOLDS) CHỈ TRÊN TẬP TRAIN
-    # Cắt thành 3 phần bằng nhau dựa trên phân vị 33% và 67%
     threshold_low = train_df["WarningScore"].quantile(0.333)
     threshold_high = train_df["WarningScore"].quantile(0.667)
 
-    print(f"Ngưỡng phân loại học được từ Train set:")
-    print(f" - LOW to MEDIUM: {threshold_low:.4f}")
-    print(f" - MEDIUM to HIGH: {threshold_high:.4f}\n")
+    def get_level(row):
+        score = row["WarningScore"]
+        avg_grade = row["avg_grade"]
 
-    # Hàm gán nhãn
-    def get_level(score):
+        # Phân loại theo phân vị thuật toán
         if score <= threshold_low:
-            return "LOW"
+            label = "LOW"
         elif score <= threshold_high:
-            return "MEDIUM"
+            label = "MEDIUM"
         else:
-            return "HIGH"
+            label = "HIGH"
 
-    # 4. GÁN NHÃN CHO CẢ TẬP TRAIN VÀ TEST
-    train_df["WarningLevel"] = train_df["WarningScore"].apply(get_level)
-    test_df["WarningLevel"] = test_df["WarningScore"].apply(get_level)
+        # LUẬT NGHIỆP VỤ: Điểm TB dưới 5.0 không được phép nằm ở mức LOW
+        if label == "LOW" and avg_grade < 5.0:
+            return "MEDIUM"
+
+        return label
+
+    # 4. GÁN NHÃN CHO CẢ TẬP TRAIN VÀ TEST (Dùng apply với axis=1 để truyền cả row)
+    train_df["WarningLevel"] = train_df.apply(get_level, axis=1)
+    test_df["WarningLevel"] = test_df.apply(get_level, axis=1)
 
     # 5. LƯU DỮ LIỆU MỚI
     train_df.to_csv(TRAIN_LABELED_FILE, index=False)
