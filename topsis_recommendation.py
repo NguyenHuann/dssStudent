@@ -1,8 +1,8 @@
 import pandas as pd
 import numpy as np
 
-# Dùng tập test đã gán nhãn (hoặc bạn có thể dùng file dự đoán của Random Forest)
-INPUT_FILE = "dataset/test/test_labeled.csv"
+# Dùng tập test đã gán nhãn
+INPUT_FILE = "data/data_demo_predicted.csv"
 
 # Trọng số của các yếu tố rủi ro (giống lúc tính Warning Score)
 WEIGHTS = {
@@ -18,11 +18,16 @@ WEIGHTS = {
 def calculate_individual_risks(row):
     """Tính 4 chỉ số rủi ro cho MỘT sinh viên (giá trị từ 0 đến 1)"""
 
-    # 1. Financial Risk
+    # 1. Kiểm tra Ghost Student (Không đăng ký tín chỉ nào)
+    total_enrolled = row["1st_sem_enrolled"] + row["2nd_sem_enrolled"]
+    if total_enrolled == 0:
+        return {"Performance": 1.0, "Failure": 1.0, "Trend": 1.0, "Financial": 1.0}
+
+    # 2. Financial Risk
     financial_risk = 1.0 if (row["Debtor"] == 1 or row["Tuition fees up to date"] == 0) else 0.0
 
-    # 2. Performance Risk (Giả định thang điểm hệ 10)
-    MAX_GRADE = 10.0
+    # 3. Performance Risk (Đã sửa thành thang điểm 4.0)
+    MAX_GRADE = 4.0
     grade_risk = 1.0 - (row["avg_grade"] / MAX_GRADE)
     # Tránh giá trị âm nếu điểm có sai số
     grade_risk = max(0.0, grade_risk)
@@ -31,12 +36,12 @@ def calculate_individual_risks(row):
     pass_rate_risk = 1.0 - avg_pass_rate
     performance_risk = (0.6 * grade_risk) + (0.4 * pass_rate_risk)
 
-    # 3. Failure Risk
+    # 4. Failure Risk
     MAX_FAILED_EXPECTED = 10.0
     failure_risk = row["total_failed"] / MAX_FAILED_EXPECTED
     failure_risk = min(1.0, failure_risk)  # Cap ở mức 1.0
 
-    # 4. Trend Risk
+    # 5. Trend Risk
     pass_rate_trend = row["1st_sem_pass_rate"] - row["2nd_sem_pass_rate"]
     trend_risk = pass_rate_trend if pass_rate_trend > 0 else 0.0
 
@@ -64,11 +69,35 @@ def rank_risk_factors(risks):
 # RECOMMENDATION ENGINE (Rule-based)
 
 def generate_advice(ranked_factors, row_data):
-    """Tạo báo cáo lời khuyên dựa trên các yếu tố xếp hạng cao nhất"""
+    """Tạo báo cáo lời khuyên dạng Text (Console) bằng cách gọi hàm rules"""
 
-    advice_list = []
+    report = f"BÁO CÁO TƯ VẤN HỌC TẬP\n"
+    report += f"{'-' * 40}\n"
+    report += f"MỨC CẢNH BÁO: {row_data['WarningLevel']} WARNING\n"
+    report += f"GPA: {row_data['avg_grade']:.2f}/4.0 | Tổng số môn trượt: {row_data['total_failed']}\n"
+    report += f"{'-' * 40}\n"
+    report += "Hệ thống nhận thấy sinh viên đang gặp rủi ro học tập. Dưới đây là lộ trình hành động ưu tiên:\n\n"
 
-    # Mapping các rủi ro thành lời khuyên
+    top_2_factors = [ranked_factors[0][0], ranked_factors[1][0]]
+
+    for i, factor in enumerate(top_2_factors, 1):
+        factor_name_vn = {
+            "Failure": "Giải quyết nợ học phần (Số lượng môn trượt cao)",
+            "Performance": "Cải thiện chất lượng học tập (Điểm số & Tỷ lệ đạt thấp)",
+            "Trend": "Phong độ học tập sa sút",
+            "Financial": "Xử lý vấn đề Tài chính / Học phí"
+        }
+
+        report += f"ƯU TIÊN {i}: {factor_name_vn[factor]}\n"
+
+        # TỐI ƯU HÓA: Thay vì viết lại rules, ta gọi thẳng hàm get_recommendation_rules
+        for advice in get_recommendation_rules(factor):
+            report += f"   - {advice}\n"
+
+    return report
+
+def get_recommendation_rules(factor):
+    """Trả về danh sách lời khuyên cụ thể cho từng yếu tố rủi ro (Dùng cho giao diện Streamlit)"""
     rules = {
         "Failure": [
             "Ưu tiên đăng ký học lại ngay các học phần tiên quyết.",
@@ -90,31 +119,7 @@ def generate_advice(ranked_factors, row_data):
             "Tìm hiểu hồ sơ xin quỹ học bổng vượt khó hoặc vay vốn sinh viên."
         ]
     }
-
-    report = f"BÁO CÁO TƯ VẤN HỌC TẬP\n"
-    report += f"{'-' * 40}\n"
-    report += f"MỨC CẢNH BÁO: {row_data['WarningLevel']} WARNING\n"
-    report += f"GPA: {row_data['avg_grade']:.2f}/10 | Tổng số môn trượt: {row_data['total_failed']}\n"
-    report += f"{'-' * 40}\n"
-    report += "Hệ thống nhận thấy sinh viên đang gặp rủi ro học tập. Dưới đây là lộ trình hành động ưu tiên:\n\n"
-
-    # Lấy 2 yếu tố nghiêm trọng nhất (Top 2) để đưa ra lời khuyên tránh bị loãng
-    top_2_factors = [ranked_factors[0][0], ranked_factors[1][0]]
-
-    for i, factor in enumerate(top_2_factors, 1):
-        # Translate tên rủi ro sang tiếng Việt
-        factor_name_vn = {
-            "Failure": "Giải quyết nợ học phần (Số lượng môn trượt cao)",
-            "Performance": "Cải thiện chất lượng học tập (Điểm số & Tỷ lệ đạt thấp)",
-            "Trend": "Phong độ học tập sa sút",
-            "Financial": "Xử lý vấn đề Tài chính / Học phí"
-        }
-
-        report += f"ƯU TIÊN {i}: {factor_name_vn[factor]}\n"
-        for advice in rules[factor]:
-            report += f"   - {advice}\n"
-
-    return report
+    return rules.get(factor, [])
 
 
 # CHẠY THỬ NGHIỆM TRÊN DỮ LIỆU
