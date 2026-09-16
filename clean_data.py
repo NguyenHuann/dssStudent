@@ -113,9 +113,7 @@ with open(INPUT_FILE, "r", encoding="utf-8-sig", newline="") as infile:
                 row["Curricular units 1st sem (approved)"]
             )
 
-            sem1_grade = to_float(
-                to_float(row["Curricular units 1st sem (grade)"]) /2.0
-            )
+            sem1_grade = to_float(row["Curricular units 1st sem (grade)"]) / 2.0
 
             sem1_without_evaluations = to_float(
                 row["Curricular units 1st sem (without evaluations)"]
@@ -125,9 +123,9 @@ with open(INPUT_FILE, "r", encoding="utf-8-sig", newline="") as infile:
             # Số học phần trượt HK1
             #
             # Failed = Evaluations - Approved
-            #
+
             sem1_failed = (
-                sem1_evaluations - sem1_approved
+                    sem1_enrolled - sem1_approved
             )
 
 
@@ -149,9 +147,7 @@ with open(INPUT_FILE, "r", encoding="utf-8-sig", newline="") as infile:
                 row["Curricular units 2nd sem (approved)"]
             )
 
-            sem2_grade = to_float(
-                to_float(["Curricular units 2nd sem (grade)"]) / 2.0
-            )
+            sem2_grade = to_float(row["Curricular units 2nd sem (grade)"]) / 2.0
 
             sem2_without_evaluations = to_float(
                 row["Curricular units 2nd sem (without evaluations)"]
@@ -160,7 +156,7 @@ with open(INPUT_FILE, "r", encoding="utf-8-sig", newline="") as infile:
 
             # Số học phần trượt HK2
             sem2_failed = (
-                sem2_evaluations - sem2_approved
+                    sem2_enrolled - sem2_approved
             )
 
 

@@ -3,9 +3,11 @@ import numpy as np
 
 TRAIN_FILE = "dataset/train/train.csv"
 TEST_FILE = "dataset/test/test.csv"
+DATAFILE = "dataset/dataset_cleaned.csv"
 
 TRAIN_LABELED_FILE = "dataset/train/train_labeled.csv"
 TEST_LABELED_FILE = "dataset/test/test_labeled.csv"
+DATA_LABELED_FILE = "dataset/dataset_labeled.csv"
 
 
 def calculate_risk_indicators(df):
@@ -19,7 +21,6 @@ def calculate_risk_indicators(df):
     financial_risk = np.where((df["Debtor"] == 1) | (df["Tuition fees up to date"] == 0), 1.0, 0.0)
 
     # 2. Performance Risk (Dựa trên điểm trung bình và tỷ lệ đạt)
-    # Giả định thang điểm là 20 (thường thấy ở dataset sinh viên Bồ Đào Nha). Nếu thang 10, thay bằng 10.
     MAX_GRADE = 10.0
     grade_risk = 1.0 - (df["avg_grade"] / MAX_GRADE)
 
@@ -29,8 +30,6 @@ def calculate_risk_indicators(df):
     performance_risk = (0.6 * grade_risk) + (0.4 * pass_rate_risk)
 
     # 3. Failure Risk (Dựa trên tổng môn trượt)
-    # Chuẩn hóa tạm thời: chia cho ngưỡng môn trượt tối đa giả định (ví dụ 10 môn)
-    # Có thể dùng MinMaxScaler của sklearn sau nếu muốn chặt chẽ hơn
     MAX_FAILED_EXPECTED = 10.0
     total_failed_risk = df["total_failed"] / MAX_FAILED_EXPECTED
     total_failed_risk = total_failed_risk.clip(upper=1.0)  # Đảm bảo không vượt quá 1
@@ -64,13 +63,15 @@ def calculate_warning_score(df):
 
 
 def apply_warning_labels():
-    # 1. ĐỌC DỮ LIỆU
+    # 1. ĐỌC DỮ LIỆU (Thêm biến full_df)
     train_df = pd.read_csv(TRAIN_FILE)
     test_df = pd.read_csv(TEST_FILE)
+    full_df = pd.read_csv(DATAFILE)
 
-    # 2. TÍNH WARNING SCORE CHO CẢ 2 TẬP
+    # 2. TÍNH WARNING SCORE CHO CẢ 3 TẬP
     train_df["WarningScore"] = calculate_warning_score(train_df)
     test_df["WarningScore"] = calculate_warning_score(test_df)
+    full_df["WarningScore"] = calculate_warning_score(full_df)
 
     # 3. TÌM NGƯỠNG (THRESHOLDS) CHỈ TRÊN TẬP TRAIN
     threshold_low = train_df["WarningScore"].quantile(0.333)
@@ -94,13 +95,15 @@ def apply_warning_labels():
 
         return label
 
-    # 4. GÁN NHÃN CHO CẢ TẬP TRAIN VÀ TEST (Dùng apply với axis=1 để truyền cả row)
+    # 4. GÁN NHÃN CHO CẢ 3 TẬP (Dùng apply với axis=1 để truyền cả row)
     train_df["WarningLevel"] = train_df.apply(get_level, axis=1)
     test_df["WarningLevel"] = test_df.apply(get_level, axis=1)
+    full_df["WarningLevel"] = full_df.apply(get_level, axis=1)
 
     # 5. LƯU DỮ LIỆU MỚI
     train_df.to_csv(TRAIN_LABELED_FILE, index=False)
     test_df.to_csv(TEST_LABELED_FILE, index=False)
+    full_df.to_csv(DATA_LABELED_FILE, index=False)
 
     # BÁO CÁO KẾT QUẢ
     print("Phân bố WarningLevel - TRAIN:")
@@ -108,6 +111,9 @@ def apply_warning_labels():
 
     print("\nPhân bố WarningLevel - TEST:")
     print(test_df["WarningLevel"].value_counts())
+
+    print("\nPhân bố WarningLevel - TOÀN BỘ DATASET:")
+    print(full_df["WarningLevel"].value_counts())
 
     print("\nĐã tạo thành công các file dữ liệu có nhãn!")
 
